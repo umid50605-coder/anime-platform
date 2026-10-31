@@ -7,6 +7,7 @@ file for local development). Nothing here is hardcoded secrets - see
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     # Real vendors are intentionally NOT implemented yet.
     anime_provider: str = "mock"
     video_provider: str = "mock"
+    video_storage_path: Path = Path.home() / "Videos" / "anime"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,10 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse
 
 from app.api.deps import get_current_user, get_watch_service
 from app.models.user import User
 from app.schemas.episode import StreamInfo
 from app.schemas.watch import WatchHistoryEntry, WatchProgressRead, WatchProgressUpdate
-from app.services.watch import EpisodeNotFoundError, WatchService
+from app.services.watch import (
+    EpisodeNotFoundError,
+    VideoFileNotFoundError,
+    WatchService,
+)
 
 router = APIRouter()
 
@@ -53,9 +58,25 @@ def get_history(
     ]
 
 
+@router.get("/{episode_id}/content", name="get_stream_content")
+def get_stream_content(
+    episode_id: str,
+    watch_service: WatchService = Depends(get_watch_service),
+) -> FileResponse:
+    """Public local video endpoint. FileResponse handles HTTP Range requests."""
+    try:
+        path = watch_service.get_stream_file_path(episode_id)
+    except (EpisodeNotFoundError, VideoFileNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    return FileResponse(path, media_type="video/mp4")
+
+
 @router.get("/{episode_id}/stream", response_model=StreamInfo)
 def get_stream(
     episode_id: str,
+    request: Request,
     watch_service: WatchService = Depends(get_watch_service),
 ) -> StreamInfo:
     """Public - watching an episode never requires an account. See PROJECT_RULES.md."""
@@ -63,4 +84,11 @@ def get_stream(
         stream = watch_service.get_stream(episode_id)
     except EpisodeNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return StreamInfo(stream_url=stream.stream_url, provider=stream.provider)
+
+    stream_url = stream.stream_url
+    if stream.provider == "local":
+        stream_url = str(
+            request.url_for("get_stream_content", episode_id=episode_id)
+        )
+
+    return StreamInfo(stream_url=stream_url, provider=stream.provider)

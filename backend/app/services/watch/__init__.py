@@ -1,3 +1,11 @@
-from app.services.watch.service import EpisodeNotFoundError, WatchService
+from app.services.watch.service import (
+    EpisodeNotFoundError,
+    VideoFileNotFoundError,
+    WatchService,
+)
 
-__all__ = ["EpisodeNotFoundError", "WatchService"]
+__all__ = [
+    "EpisodeNotFoundError",
+    "VideoFileNotFoundError",
+    "WatchService",
+]

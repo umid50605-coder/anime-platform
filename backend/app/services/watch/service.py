@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from app.integrations.video_source import StreamInfo, VideoProvider
 from app.models.watch_progress import WatchProgress
@@ -8,6 +9,10 @@ from app.repositories.watch import WatchRepository
 
 
 class EpisodeNotFoundError(Exception):
+    pass
+
+
+class VideoFileNotFoundError(Exception):
     pass
 
 
@@ -76,4 +81,16 @@ class WatchService:
         episode = self.episode_repository.get_by_id(episode_id)
         if episode is None:
             raise EpisodeNotFoundError(f"Episode {episode_id} not found")
-        return self.video_provider.get_stream(episode.external_episode_id)
+        return self.video_provider.get_stream_for_episode(
+            episode.external_episode_id, episode.id
+        )
+
+    def get_stream_file_path(self, episode_id: str) -> Path:
+        episode = self.episode_repository.get_by_id(episode_id)
+        if episode is None:
+            raise EpisodeNotFoundError(f"Episode {episode_id} not found")
+
+        path = self.video_provider.get_file_path(episode.id)
+        if path is None:
+            raise VideoFileNotFoundError("Video file not found")
+        return path

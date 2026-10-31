@@ -10,6 +10,7 @@ later means adding methods/fields here, not restructuring callers.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -26,3 +27,13 @@ class VideoProvider(ABC):
     @abstractmethod
     def get_stream(self, external_episode_id: str) -> StreamInfo:
         """Resolve a playable stream URL for an episode's provider-specific id."""
+
+    def get_stream_for_episode(
+        self, external_episode_id: str, episode_id: str
+    ) -> StreamInfo:
+        """Resolve a stream using provider ID and platform episode ID."""
+        return self.get_stream(external_episode_id)
+
+    def get_file_path(self, episode_id: str) -> Path | None:
+        """Return a local video path, or None for URL-based providers."""
+        return None

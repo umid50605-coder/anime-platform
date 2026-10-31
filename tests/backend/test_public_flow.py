@@ -141,3 +141,56 @@ def test_watch_history_uses_empty_anime_id_when_episode_is_unresolvable(client):
 
     assert len(history) == 1
     assert history[0].anime_id == ""
+
+
+def test_local_video_content_is_public_and_supports_range(client, tmp_path):
+    from app.api.deps import get_video_provider_dep
+    from app.integrations.video_source.local_provider import LocalVideoProvider
+
+    anime = _seed_one_anime_with_episode(client)
+    episode_id = client.get(
+        f"/api/episodes/anime/{anime.id}"
+    ).json()[0]["id"]
+
+    video_content = b"0123456789abcdef"
+    (tmp_path / f"{episode_id}.mp4").write_bytes(video_content)
+
+    client.app.dependency_overrides[get_video_provider_dep] = (
+        lambda: LocalVideoProvider(tmp_path)
+    )
+
+    try:
+        response = client.get(
+            f"/api/watch/{episode_id}/content",
+            headers={"Range": "bytes=0-3"},
+        )
+
+        assert response.status_code == 206
+        assert response.content == b"0123"
+        assert response.headers["content-range"] == "bytes 0-3/16"
+        assert response.headers["content-type"] == "video/mp4"
+    finally:
+        client.app.dependency_overrides.pop(get_video_provider_dep, None)
+
+
+def test_local_video_content_returns_404_when_file_missing(client, tmp_path):
+    from app.api.deps import get_video_provider_dep
+    from app.integrations.video_source.local_provider import LocalVideoProvider
+
+    anime = _seed_one_anime_with_episode(client)
+    episode_id = client.get(
+        f"/api/episodes/anime/{anime.id}"
+    ).json()[0]["id"]
+
+    client.app.dependency_overrides[get_video_provider_dep] = (
+        lambda: LocalVideoProvider(tmp_path)
+    )
+
+    try:
+        response = client.get(
+            f"/api/watch/{episode_id}/content"
+        )
+
+        assert response.status_code == 404
+    finally:
+        client.app.dependency_overrides.pop(get_video_provider_dep, None)

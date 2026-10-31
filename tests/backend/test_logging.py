@@ -3,6 +3,7 @@ import logging
 import pytest
 from app.core.database import get_db
 from app.core.logging.middleware import REQUEST_ID_HEADER
+from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 
@@ -89,15 +90,18 @@ def test_exception_log_contains_request_id(client, caplog):
         raise RuntimeError("simulated database outage")
         yield  # pragma: no cover - unreachable, keeps this a generator
 
+    original_override = client.app.dependency_overrides[get_db]
     client.app.dependency_overrides[get_db] = broken_get_db
     local_client = TestClient(client.app, raise_server_exceptions=False)
+
     try:
         with caplog.at_level(logging.ERROR):
-            response = local_client.get("/api/anime/", headers={REQUEST_ID_HEADER: "req-error-1"})
+            response = local_client.get(
+                "/api/anime/",
+                headers={REQUEST_ID_HEADER: "req-error-1"},
+        )
     finally:
-        # Restore the working override the `client` fixture installed.
-        from tests.backend.conftest import db_session as _unused  # noqa: F401
-
+        client.app.dependency_overrides[get_db] = original_override
     assert response.status_code == 500
     assert response.headers[REQUEST_ID_HEADER] == "req-error-1"
     assert response.json() == {"detail": "Internal server error"}
@@ -119,7 +123,7 @@ def test_request_errored_log_contains_method_path_status_and_duration(client, ca
     which must carry status=500 the same way a normal response's
     request-lifecycle log line carries its real status code.
     """
-    from fastapi.testclient import TestClient
+    original_override = client.app.dependency_overrides[get_db]
 
     def broken_get_db():
         raise RuntimeError("simulated database outage")
@@ -131,7 +135,7 @@ def test_request_errored_log_contains_method_path_status_and_duration(client, ca
         with caplog.at_level(logging.ERROR, logger="app.core.logging.middleware"):
             local_client.get("/api/anime/", headers={REQUEST_ID_HEADER: "req-error-2"})
     finally:
-        from tests.backend.conftest import db_session as _unused  # noqa: F401
+        client.app.dependency_overrides[get_db] = original_override
 
     errored_logs = [r for r in caplog.records if "request errored" in r.getMessage()]
     assert len(errored_logs) == 1
