@@ -19,9 +19,12 @@ class AnimeService:
         self.anime_repository = anime_repository
         self.anime_provider = anime_provider
 
-    def list_catalog(self) -> list[Anime]:
+    def list_catalog(self, *, offset: int = 0, limit: int = 100) -> list[Anime]:
         """Returns the platform's published catalog (our own DB, not the provider)."""
-        return self.anime_repository.list_all()
+        return self.anime_repository.list_all(offset=offset, limit=limit)
+
+    def search_catalog(self, query: str) -> list[Anime]:
+        return self.anime_repository.search(query)
 
     def get_by_slug(self, slug: str) -> Anime | None:
         return self.anime_repository.get_by_slug(slug)
@@ -51,16 +54,21 @@ class AnimeService:
         creating it from provider metadata if needed. This is how an anime
         gets "published" into our own catalog.
         """
-        existing = self.anime_repository.get_by_external_id("mock", external_id)
+        provider_name = self.anime_provider.name
+        existing = self.anime_repository.get_by_external_id(provider_name, external_id)
         if existing:
+            self.anime_repository.add_external_mapping(existing.id, provider_name, external_id)
+            self.anime_repository.db.commit()
             return existing
 
         metadata = self.anime_provider.get_anime(external_id)
         anime = Anime(
-            external_provider="mock",
+            external_provider=provider_name,
             external_id=metadata.external_id,
             slug=metadata.slug,
             title=metadata.title,
             poster_url=metadata.poster_url,
         )
-        return self.anime_repository.create(anime)
+        return self.anime_repository.create_with_external_mapping(
+            anime, provider_name, metadata.external_id
+        )

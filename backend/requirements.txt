@@ -22,6 +22,7 @@ idna==3.19
 iniconfig==2.3.0
 Mako==1.4.1
 MarkupSafe==3.0.3
+PyMySQL==1.1.1
 packaging==26.3
 passlib==1.7.4
 pluggy==1.6.0

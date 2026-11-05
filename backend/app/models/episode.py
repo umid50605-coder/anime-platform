@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,6 +25,9 @@ class Episode(Base):
     """
 
     __tablename__ = "episodes"
+    __table_args__ = (
+        UniqueConstraint("anime_id", "external_episode_id", name="uq_anime_external_episode"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     anime_id: Mapped[str] = mapped_column(

@@ -22,6 +22,10 @@ class AnimeMetadata:
     poster_url: str = ""
     synopsis: str = ""
     genres: list[str] = field(default_factory=list)
+    alternative_titles: list[str] = field(default_factory=list)
+    cover_url: str = ""
+    release_year: int | None = None
+    status: str | None = None
 
 
 @dataclass
@@ -40,6 +44,14 @@ class AnimeProvider(ABC):
     #: Stored alongside external_id in our DB so an id remains unambiguous
     #: even if we support multiple providers side by side later.
     name: str = "unknown"
+
+    def list_anime(self, page: int = 1, limit: int = 25) -> list[AnimeMetadata]:
+        """Return a page of provider anime records.
+
+        Providers that do not expose a catalog may keep the default empty
+        implementation; search and detail remain the required operations.
+        """
+        return []
 
     @abstractmethod
     def get_anime(self, external_id: str) -> AnimeMetadata:

@@ -4,6 +4,7 @@ Alembic autogenerate and for `Base.metadata.create_all()` in tests.
 """
 
 from app.models.anime import Anime
+from app.models.anime_external_id import AnimeExternalId
 from app.models.episode import Episode
 from app.models.favorite import Favorite
 from app.models.password_reset_token import PasswordResetToken
@@ -13,6 +14,7 @@ from app.models.watch_progress import WatchProgress
 
 __all__ = [
     "Anime",
+    "AnimeExternalId",
     "Episode",
     "Favorite",
     "PasswordResetToken",

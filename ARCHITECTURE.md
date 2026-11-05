@@ -11,8 +11,8 @@ FRONTEND (React SPA)
  v
 BACKEND API (FastAPI, modular monolith)
  |
- +-- OWN DATABASE (SQLite dev / PostgreSQL-ready)
- +-- EXTERNAL ANIME API   (behind AnimeProvider interface - mock today)
+ +-- OWN DATABASE (MySQL primary / SQLite alternative)
+ +-- EXTERNAL ANIME API   (behind AnimeProvider interface - mock or Jikan)
  +-- EXTERNAL VIDEO SOURCE (behind VideoProvider interface - mock today)
 ```
 
@@ -91,15 +91,15 @@ the metadata vendor later a provider-level change, not a schema migration.
 
 `app/integrations/anime_api/provider.py` defines the `AnimeProvider`
 interface (`get_anime`, `search_anime`, `list_episodes`) and a vendor-
-agnostic `AnimeMetadata`/`EpisodeMetadata` shape. `mock_provider.py` is the
-only implementation today - two fixture anime, used to prove the
-abstraction works end-to-end (register -> catalog -> detail -> episodes ->
-search all round-trip through it in the test suite and in manual
-validation). `factory.py` selects the implementation via `ANIME_PROVIDER`
+agnostic `AnimeMetadata`/`EpisodeMetadata` shape. `mock_provider.py` remains the
+deterministic fixture implementation, and `jikan_provider.py` provides a
+public read-only adapter. The mock proves the abstraction end-to-end in the
+test suite; Jikan is isolated behind the same contract for deployments.
+`factory.py` selects the implementation via `ANIME_PROVIDER`
 in settings; nothing else in the codebase imports `MockAnimeProvider`
 directly except the factory.
 
-Adding a real vendor (AniList, Jikan, etc.) later means: write a new
+Adding another vendor later means: write a new
 `AnimeProvider` subclass, add one branch in `factory.py`. `AnimeService`,
 every router, and every test that uses fakes are unaffected.
 
@@ -145,7 +145,7 @@ sized choice for now.
 - Telegram bot/channel integration (any of it - no modules, no event
   system wired to it, out of scope for this phase per the brief)
 - Admin panel
-- Real anime-metadata vendor and real video vendor (both are mock-only)
+- Additional anime-metadata vendors beyond the mock and Jikan adapters
 - Adaptive streaming (bitrate switching, bandwidth estimation, buffer
   control, prefetching)
 - Recommendation systems

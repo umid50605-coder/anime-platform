@@ -25,10 +25,9 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # --- Database ---
-    # Default is a local SQLite file so the foundation runs with zero external
-    # infrastructure. Swap to a PostgreSQL URL in production - SQLAlchemy
-    # abstracts the engine, so no application code needs to change.
-    database_url: str = "sqlite:///./anime_platform.db"
+    # MySQL is the primary database. SQLite remains available when explicitly
+    # selected, and test fixtures use isolated in-memory SQLite databases.
+    database_url: str = "mysql+pymysql://anime_app:CHANGE_ME@localhost:3306/anime_metadata"
 
     # --- Security / Auth ---
     jwt_secret_key: str = "CHANGE_ME_IN_ENV"
@@ -38,15 +37,19 @@ class Settings(BaseSettings):
     password_reset_token_expire_minutes: int = 30
 
     # --- CORS ---
-    cors_allow_origins: list[str] = ["http://localhost:5173"]
+    cors_allow_origins: list[str] = [
+        "http://localhost:5173",
+        "http://10.121.58.173:5173",
+    ]
 
     # --- Logging ---
     log_level: str = "INFO"
 
     # --- Integrations (provider selection) ---
-    # "mock" is the only implementation for now (see app/integrations).
-    # Real vendors are intentionally NOT implemented yet.
+    # Supported implementations: "mock" and "jikan" (see app/integrations).
     anime_provider: str = "mock"
+    anime_provider_base_url: str = "https://api.jikan.moe/v4"
+    anime_provider_timeout_seconds: float = 10.0
     video_provider: str = "mock"
     video_storage_path: Path = Path.home() / "Videos" / "anime"
 

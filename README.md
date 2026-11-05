@@ -8,14 +8,15 @@ streaming are out of scope for this phase (see `ARCHITECTURE.md` section 9).
 
 Anime metadata and video streaming both come from external providers,
 accessed through interfaces (`AnimeProvider`, `VideoProvider`) with a mock
-implementation each - see `ARCHITECTURE.md` sections 5-6. No real vendor is
-wired in yet.
+implementation each - see `ARCHITECTURE.md` sections 5-6. Jikan can be
+selected explicitly for read-only external metadata.
 
 ## Prerequisites
 
 - Python 3.12+
 - Node.js 20+ and npm
-- No external database server needed - local dev uses SQLite.
+- MySQL 8.x is the deployment database; SQLite remains available for local
+  development and tests.
 
 ## Backend setup
 
@@ -24,10 +25,10 @@ cd backend
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 
-cp ../.env.example .env   # then edit backend/.env if you need non-default values
+cp ../.env.example .env   # edit DATABASE_URL and credentials for your MySQL instance
 
 export PYTHONPATH=.
-./.venv/bin/alembic upgrade head        # creates anime_platform.db with all tables
+./.venv/bin/alembic upgrade head        # applies schema to DATABASE_URL (MySQL by default)
 ./.venv/bin/python scripts/seed_mock_data.py   # optional: adds 2 sample anime + episodes
 
 ./.venv/bin/uvicorn app.main:app --reload --port 8000
