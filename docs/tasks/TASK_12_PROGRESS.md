@@ -1,5 +1,22 @@
 # Task 12 Progress
 
+## Final Status
+
+**Completed and verified.**
+
+Task 12 acceptance criteria are satisfied: MySQL is the primary application
+database, SQLite remains an isolated alternative for tests, anime metadata
+providers are configurable, and repeated anime/episode imports are idempotent.
+The final verification completed successfully with 79 backend tests passing,
+frontend TypeScript and production builds passing, and a live MySQL import
+idempotency check passing.
+
+The only recorded environmental limitation is live Jikan verification. DNS and
+general HTTPS connectivity worked, but TCP connections to `api.jikan.moe:443`
+timed out from the verification network. The adapter's timeout, HTTP-error,
+rate-limit, and response-normalization handling is implemented and reviewed;
+this network condition does not block completion of Task 12.
+
 ## Objectives
 
 Make anime metadata providers replaceable, normalize provider responses, keep
