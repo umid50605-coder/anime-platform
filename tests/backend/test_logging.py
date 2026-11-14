@@ -102,6 +102,8 @@ def test_exception_log_contains_request_id(client, caplog):
         )
     finally:
         client.app.dependency_overrides[get_db] = original_override
+        from tests.backend.conftest import db_session as _unused  # noqa: F401
+        
     assert response.status_code == 500
     assert response.headers[REQUEST_ID_HEADER] == "req-error-1"
     assert response.json() == {"detail": "Internal server error"}

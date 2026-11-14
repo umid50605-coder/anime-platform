@@ -6,7 +6,6 @@ from app.models.user import User
 from app.repositories.password_reset import PasswordResetTokenRepository
 from app.repositories.user import UserRepository
 
-
 def _create_user(user_repository: UserRepository, email: str) -> User:
     return user_repository.create(User(email=email, hashed_password="hashed-password"))
 

@@ -13,6 +13,7 @@ import app.models  # noqa: F401 registers all models on Base.metadata
 import pytest
 from app.core.database import Base, get_db
 from app.core.rate_limit import reset_rate_limiter
+from app.integrations.email import reset_email_sender
 from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -34,6 +35,18 @@ def _reset_rate_limiter():
     reset_rate_limiter()
     yield
     reset_rate_limiter()
+
+
+@pytest.fixture(autouse=True)
+def _reset_email_outbox():
+    """
+    The email sender is a cached process-wide singleton (like the rate limiter),
+    so its in-memory outbox would otherwise carry messages - including reset
+    links - from one test into the next.
+    """
+    reset_email_sender()
+    yield
+    reset_email_sender()
 
 
 @pytest.fixture()
