@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { PrimaryButton, SecondaryButton } from "../../components/common/Button";
 import { ErrorNotice } from "../../components/common/Status";
 import { useAuth } from "../../features/auth/useAuth";
@@ -94,6 +95,8 @@ function AuthForms({
       </div>
 
       {error && <ErrorNotice message={error} />}
+
+      {mode === "login" && <Link to="/forgot-password">Forgot your password?</Link>}
 
       <PrimaryButton type="submit" disabled={isSubmitting}>
         {mode === "login" ? "Sign in" : "Create account"}

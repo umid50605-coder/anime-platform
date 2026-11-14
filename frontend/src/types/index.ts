@@ -67,3 +67,7 @@ export interface HealthStatus {
   status: string;
   environment: string;
 }
+
+export interface MessageResponse {
+  detail: string;
+}

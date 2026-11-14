@@ -1,5 +1,5 @@
 import { apiClient, restoreAuthToken } from "./client";
-import type { AuthToken, User } from "../../types";
+import type { AuthToken, MessageResponse, User } from "../../types";
 
 export interface RegisterPayload {
   email: string;
@@ -32,4 +32,15 @@ export function logout(): Promise<void> {
 
 export function fetchMe(): Promise<User> {
   return apiClient.get<User>("/api/users/me");
+}
+
+export function requestPasswordReset(email: string): Promise<MessageResponse> {
+  return apiClient.post<MessageResponse>("/api/auth/forgot-password", { email });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<MessageResponse> {
+  return apiClient.post<MessageResponse>("/api/auth/reset-password", {
+    token,
+    new_password: newPassword,
+  });
 }

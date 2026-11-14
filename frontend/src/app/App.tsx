@@ -6,6 +6,8 @@ import { WatchPage } from "../pages/watch/WatchPage";
 import { SearchPage } from "../pages/search/SearchPage";
 import { ProfilePage } from "../pages/profile/ProfilePage";
 import { FavoritesPage } from "../pages/favorites/FavoritesPage";
+import { ForgotPasswordPage } from "../pages/forgot-password/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/reset-password/ResetPasswordPage";
 
 function App() {
   return (
@@ -18,6 +20,8 @@ function App() {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Routes>
     </>
   );
