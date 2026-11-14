@@ -2,6 +2,304 @@
 
 ## 1. System overview
 
+Anime Platform is a React/Vite/TypeScript single-page application backed by a FastAPI modular monolith.
+
+```text
+USER
+  |
+  v
+FRONTEND (React + Vite + TypeScript SPA)
+  |
+  v
+BACKEND API (FastAPI modular monolith)
+  |
+  +-- OWN DATABASE (MySQL primary / SQLite alternative)
+  |
+  +-- ANIME METADATA (AnimeProvider: Mock / Jikan)
+  |
+  +-- VIDEO SOURCE (VideoProvider abstraction; implementation details
+                    must be verified against the current repository)
+```
+
+The project is a modular monolith, not a set of microservices. Telegram integration, admin/content management, and adaptive streaming are not part of the current implemented system. Admin/content management remains a future roadmap task.
+
+## 2. Frontend / backend relationship
+
+The frontend is a Vite + React + TypeScript SPA. It communicates with the backend through `frontend/src/services/api/`:
+
+- `client.ts` provides the shared API client.
+- Domain-specific API modules handle auth, anime, episodes, watch, favorites, and health.
+- Components should not call `fetch()` directly.
+
+Authentication state is managed in the auth feature (`AuthContext` and `useAuth`). The documented implementation stores JWT state in `localStorage`. This is an MVP tradeoff with an XSS exposure; any move to httpOnly cookies and CSRF protection requires a deliberate design decision and coordinated frontend/backend changes.
+
+## 3. Backend layers and dependency direction
+
+```text
+API routers
+    |
+    v
+Services
+    |
+    v
+Repositories / Integrations
+    |
+    v
+Own Database / External Providers
+```
+
+Concretely:
+
+```text
+app/api/*/router.py
+    -> app/services/*/service.py
+        -> app/repositories/*/repository.py
+        -> app/integrations/*
+```
+
+Responsibilities:
+
+- **API routers:** parse requests, call services, shape responses. They do not contain business logic or direct database/provider access.
+- **Services:** own business rules and orchestration. They depend on repository/provider abstractions, not SQLAlchemy sessions or vendor HTTP clients.
+- **Repositories:** own database queries and persistence operations, not business rules.
+- **Integrations:** adapt external systems to internal interfaces.
+- **Dependency wiring:** `app/api/deps.py` is the central location that builds request-scoped dependencies.
+
+The intended dependency direction is:
+
+```text
+Frontend -> Backend API -> Application Services
+         -> Repositories / Integrations -> Database / External Providers
+```
+
+## 4. Database responsibility and strategy
+
+The database stores platform state and mappings; it is not intended to be a full mirror of an external anime catalog.
+
+**Current strategy:**
+- **MySQL 8.x is the primary database strategy.**
+- **SQLite remains an alternative for local development and isolated tests.**
+
+An older architecture version described SQLite development and PostgreSQL readiness. That description is superseded and must not replace the current MySQL-primary strategy.
+
+The documented tables and responsibilities include:
+
+| Table | Responsibility |
+|---|---|
+| `users` | Accounts and authentication |
+| `anime` | Mapping/cache for external anime identifiers and fields needed by the platform |
+| `episodes` | Mapping/cache for external episode identifiers |
+| `watch_progress` | Per-user episode progress; also used to derive watch history |
+| `favorites` | User favorites |
+| `refresh_sessions` | Refresh-session lifecycle |
+| `password_reset_tokens` | Password-reset token hashes and lifecycle |
+
+There is no separate watch-history table in the documented design: watch history is derived from `watch_progress` ordered by its update timestamp. Do not add a second table without a concrete requirement and an approved migration plan.
+
+Anime and episode records are mappings rather than full copies of all external metadata. The provider supplies metadata through its interface; the database stores the platform-owned state and the fields needed for stable internal references and rendering.
+
+## 5. Anime metadata provider
+
+`AnimeProvider` defines the vendor-neutral metadata boundary. The documented operations include:
+
+- `get_anime`
+- `search_anime`
+- `list_episodes`
+
+The internal data shapes include vendor-neutral `AnimeMetadata` and `EpisodeMetadata`.
+
+The current documented adapters are:
+- **Mock provider:** deterministic implementation for local/test use.
+- **Jikan provider:** read-only external metadata adapter.
+
+The factory selects the provider through configuration (documented setting: `ANIME_PROVIDER`). A new metadata vendor should be added as a new adapter implementing the existing interface and a factory selection branch. Do not couple `AnimeService` or API routers directly to a vendor SDK or HTTP client.
+
+Jikan is a metadata source. It does not provide video streams.
+
+## 6. Video provider and local streaming
+
+Video access is separated behind the `VideoProvider` boundary. The earlier architecture describes a `get_stream(external_episode_id) -> StreamInfo`-style interface and a mock provider.
+
+**Task 13 — Video Provider and Local Streaming — is recorded as completed in the current project roadmap.** The exact implementation must be verified from the repository before changing it. Do not infer or add features such as adaptive bitrate switching, bandwidth estimation, buffer control, prefetching, HLS, or DASH unless the code and an approved requirement support them.
+
+Keep anime metadata-provider responsibilities separate from video-provider and local-streaming responsibilities.
+
+## 7. Authentication boundary
+
+Authentication is optional for the core viewing flow.
+
+Public flow:
+- Home
+- Catalog
+- Anime detail
+- Episodes
+- Search
+- Watch/stream
+
+These must remain accessible without an account or an Authorization header.
+
+Account-scoped flow:
+- Favorites
+- Watch progress
+- Watch history
+- Current-user profile
+
+These remain authenticated and must not pull public browsing/watching behind a login wall.
+
+## 8. Authentication and security capabilities
+
+The documented current foundation includes:
+- JWT authentication.
+- Argon2id password hashing.
+- Refresh-session rotation and server-side logout.
+- Frontend session restoration.
+- Route-scoped rate limiting for registration and login.
+- Request-ID correlation and request-boundary logging.
+- Application-level password reset.
+
+### Password reset
+
+The password-reset flow uses:
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- A `password_reset_tokens` table.
+- Single-use reset tokens stored as hashes.
+- A transaction that consumes the token, updates the password, expires other reset links, and revokes refresh sessions together.
+- A generic forgot-password response to avoid account enumeration.
+- A URL fragment (`#token=`) so the raw token is not sent as a query parameter.
+
+The `EmailSender` interface is present, but the documented implementation is an in-memory sender. It does not deliver real email. See `docs/decisions/0005-password-reset.md` for the detailed decision and limitations.
+
+## 9. Request correlation, logging, and rate limiting
+
+### Request correlation and logging
+
+The documented implementation assigns or accepts a safe request ID through `RequestContextMiddleware`. A context-aware logging setup adds the request ID to request log records.
+
+Provider failures are logged at provider boundaries through logging decorators wired by factories. Database errors are logged centrally at the database dependency boundary. Sensitive values must not be logged.
+
+See `docs/decisions/0003-request-correlation-logging.md`.
+
+### Authentication rate limiting
+
+The documented rate limiter follows an interface/factory design. The current in-memory implementation is process-local and is applied only to:
+- `/api/auth/register`
+- `/api/auth/login`
+
+The documented limit is 5 requests/minute/IP for each route independently. It is not a global middleware and does not limit public browsing/watch endpoints.
+
+No distributed Redis limiter is assumed. Do not trust forwarded client IP headers unless a trusted proxy is configured.
+
+See `docs/decisions/0004-auth-rate-limiting.md`.
+
+## 10. Email capability and Task 11
+
+Email sending is abstracted behind `EmailSender`. The current documented `memory` sender records messages in an in-process outbox and is useful for tests; it is not production email delivery.
+
+### Task 11 — Email Verification
+
+**Status: PENDING — not implemented.**
+
+This is a separate roadmap task. The earlier task definition identifies the likely concerns:
+- User verification state/metadata.
+- Verification token generation, expiry, and single-use behavior.
+- Backend verification and resend routes/service logic.
+- Frontend verification/resend UI.
+- Tests for successful verification and expired/tampered token rejection.
+- Integration with an email provider.
+
+These are planning requirements, not a claim that the feature already exists. Before implementation, audit the current user model, auth service, email integration, database migrations, frontend auth flow, and tests. Define the exact schema and API contract before changing code.
+
+The absence of real email delivery is a known dependency/limitation and must be addressed in the task plan.
+
+## 11. Admin / Content Management
+
+### Task 14 — Admin / Content Management
+
+**Status: NOT IMPLEMENTED.**
+
+The current architecture documentation explicitly lists the admin panel as not implemented. Task 14 remains a separate roadmap task.
+
+No admin role model, permission matrix, content-management workflow, or admin API/UI contract is asserted here because those details have not been established by the available task definition. They must be defined through an approved requirements document and repository audit before implementation.
+
+Do not treat the absence of an admin panel as a reason to add speculative admin abstractions to unrelated tasks.
+
+## 12. Deployment, portability, and production readiness
+
+### Task 15 — Deployment, Portability and Production Readiness
+
+**Status: PENDING.**
+
+This is a separate roadmap task. The earlier architecture records that a production deployment target, containerization approach, and CI/CD pipeline had not yet been selected.
+
+The task must begin with an audit and an explicit deployment/portability plan. Do not claim production readiness based only on local setup instructions. Do not assume a hosting provider, container strategy, CI/CD platform, or production topology until selected and approved.
+
+The detailed acceptance criteria and implementation sequence remain to be defined in the Task 15 plan.
+
+## 13. Explicitly not implemented / not assumed
+
+The following capabilities are not established as implemented by the architecture sources:
+
+- Telegram bot/channel integration.
+- Admin panel / content-management UI (Task 14).
+- Adaptive bitrate streaming, bandwidth estimation, buffer controller, or prefetching.
+- Recommendation systems.
+- Message queue / Redis / Kafka infrastructure.
+- Production email delivery.
+- A selected production deployment target, containerization strategy, or CI/CD pipeline (Task 15).
+
+These exclusions describe current implementation boundaries. They do not remove the pending roadmap tasks.
+
+## 14. Architecture decisions and deviations
+
+Architecture decisions should be recorded in `docs/decisions/NNNN-title.md`.
+
+The documented decisions include:
+- `0002-remove-auth-from-public-flow.md` — public browsing/watching remains unauthenticated.
+- `0003-request-correlation-logging.md` — request correlation and logging boundaries.
+- `0004-auth-rate-limiting.md` — route-scoped authentication rate limiting.
+- `0005-password-reset.md` — password-reset flow and limitations.
+
+The earlier architecture also records two deliberate layout deviations:
+1. A `repositories/favorite/` layer was added because favorites are persisted state and require their own data-access boundary.
+2. `frontend/.env.example` was added because Vite reads frontend environment variables from the frontend package root.
+
+Preserve documented decisions unless an approved change supersedes them.
+
+## 15. Project roadmap — authoritative status list
+
+This roadmap is part of the project documentation and must be preserved in future edits.
+
+| Task | Name | Current status |
+|---|---|---|
+| Task 10 | Password Reset | IMPLEMENTED — application-level flow; real email delivery remains unavailable |
+| Task 11 | Email Verification | PENDING — separate task |
+| Task 12 | Configurable Anime Data Source | COMPLETED |
+| Task 13 | Video Provider and Local Streaming | COMPLETED |
+| Task 14 | Admin / Content Management | NOT IMPLEMENTED |
+| Task 15 | Deployment, Portability and Production Readiness | PENDING |
+
+Task order/history matters: Tasks 12 and 13 were completed before Task 10 was finalized. Do not reorder the historical sequence or mark Tasks 11, 14, or 15 complete without implementation evidence and explicit verification.
+
+## 16. Change discipline
+
+Before changing an unfamiliar area:
+1. Read this document and relevant Architecture Decision Records.
+2. Inspect the actual repository and Git working tree.
+3. Identify the exact files, contracts, and dependencies affected.
+4. Separate task-related defects from unrelated technical debt.
+5. Present an implementation plan and wait for approval when the task requires it.
+6. Preserve user changes and avoid destructive Git/database operations.
+7. Run relevant tests, lint, formatting, and build checks.
+8. Report exact changes, test results, limitations, and remaining work.
+
+
+
+
+# Architecture
+
+## 1. System overview
+
 ```
 USER
  |
@@ -11,8 +309,8 @@ FRONTEND (React SPA)
  v
 BACKEND API (FastAPI, modular monolith)
  |
- +-- OWN DATABASE (MySQL primary / SQLite alternative)
- +-- EXTERNAL ANIME API   (behind AnimeProvider interface - mock or Jikan)
+ +-- OWN DATABASE (SQLite dev / PostgreSQL-ready)
+ +-- EXTERNAL ANIME API   (behind AnimeProvider interface - mock today)
  +-- EXTERNAL VIDEO SOURCE (behind VideoProvider interface - mock today)
 ```
 
@@ -91,15 +389,15 @@ the metadata vendor later a provider-level change, not a schema migration.
 
 `app/integrations/anime_api/provider.py` defines the `AnimeProvider`
 interface (`get_anime`, `search_anime`, `list_episodes`) and a vendor-
-agnostic `AnimeMetadata`/`EpisodeMetadata` shape. `mock_provider.py` remains the
-deterministic fixture implementation, and `jikan_provider.py` provides a
-public read-only adapter. The mock proves the abstraction end-to-end in the
-test suite; Jikan is isolated behind the same contract for deployments.
-`factory.py` selects the implementation via `ANIME_PROVIDER`
+agnostic `AnimeMetadata`/`EpisodeMetadata` shape. `mock_provider.py` is the
+only implementation today - two fixture anime, used to prove the
+abstraction works end-to-end (register -> catalog -> detail -> episodes ->
+search all round-trip through it in the test suite and in manual
+validation). `factory.py` selects the implementation via `ANIME_PROVIDER`
 in settings; nothing else in the codebase imports `MockAnimeProvider`
 directly except the factory.
 
-Adding another vendor later means: write a new
+Adding a real vendor (AniList, Jikan, etc.) later means: write a new
 `AnimeProvider` subclass, add one branch in `factory.py`. `AnimeService`,
 every router, and every test that uses fakes are unaffected.
 
@@ -145,7 +443,7 @@ sized choice for now.
 - Telegram bot/channel integration (any of it - no modules, no event
   system wired to it, out of scope for this phase per the brief)
 - Admin panel
-- Additional anime-metadata vendors beyond the mock and Jikan adapters
+- Real anime-metadata vendor and real video vendor (both are mock-only)
 - Adaptive streaming (bitrate switching, bandwidth estimation, buffer
   control, prefetching)
 - Recommendation systems
@@ -206,7 +504,23 @@ construction. Known, accepted limitation: state is per-process (no
 Redis/distributed backend yet). Full rationale in
 `docs/decisions/0004-auth-rate-limiting.md`.
 
-## 13. Deviations from the brief's exact file layout
+## 13. Password reset
+
+`POST /api/auth/forgot-password` -> `PasswordResetService` creates a single-use
+token (only its hash is stored in `password_reset_tokens`) and emails a link via
+the `EmailSender` interface (`app/integrations/email`, same interface/factory
+shape as the anime and video providers; only an in-memory implementation exists
+so far). `POST /api/auth/reset-password` redeems it through
+`PasswordResetTokenRepository.consume_and_reset_password`, which in ONE
+transaction spends the token, sets the new password hash, expires the user's
+other reset links, and revokes all of the user's refresh sessions - so a failure
+anywhere leaves the token unspent and the password unchanged. Responses never
+reveal whether an email is registered. Frontend routes `/forgot-password` and
+`/reset-password`; the emailed link carries the token in the URL fragment so it
+never reaches a server. Full rationale and limitations (notably: no real email
+is delivered yet): `docs/decisions/0005-password-reset.md`.
+
+## 14. Deviations from the brief's exact file layout
 
 Documented transparently rather than silently changed, per project rules:
 
@@ -223,3 +537,4 @@ Documented transparently rather than silently changed, per project rules:
    frontend package root, not from a root-level file - so a frontend-only
    example file is needed for the frontend to actually pick up
    `VITE_API_BASE_URL` when a developer copies it into `frontend/.env`.
+

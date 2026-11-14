@@ -1,5 +1,107 @@
 # Project Rules
 
+These rules are mandatory working constraints for the Anime Platform repository. If a change cannot follow a rule, stop and explain the conflict instead of silently making an exception.
+
+## 1. Layering
+
+- **API handlers stay thin.** A router parses the request, calls the relevant service method, and shapes the response. No business logic, direct database queries, or direct provider calls in router modules.
+- **Business logic lives in services.** Do not place business rules in routers, repositories, or React components.
+- **Database access goes through repositories.** Services must not import SQLAlchemy or manipulate a `Session` directly; they receive repository dependencies.
+- **External providers are accessed through interfaces.** Use `AnimeProvider`, `VideoProvider`, and other established interfaces. Concrete implementations are constructed through their factory functions.
+- **Dependency wiring lives in `app/api/deps.py`.** Do not construct repositories/services ad hoc inside route handlers.
+
+## 2. Authentication boundary
+
+- **The core browsing/watching flow remains public.** Home, catalog, anime detail, episodes, search, watch, and stream endpoints must work without authentication.
+- **Account-scoped features remain isolated.** Favorites, watch progress/history, and profile operations require an account, but must not force authentication on public browsing or watching.
+- Do not introduce another authentication mechanism (sessions, a second token scheme, etc.) without an approved technical reason. The current mechanism is JWT with Argon2id password hashing.
+
+## 3. Password reset invariants
+
+- Redeeming a reset token is one transaction. Spending the token, changing the password, expiring other reset links, and revoking the user's refresh sessions must commit or roll back together through the repository transaction boundary.
+- Never log a raw reset token, reset URL, password, or email body. Log safe identifiers and exception types only.
+- The forgot-password response must not reveal whether an email is registered, inactive, or otherwise eligible.
+- Reset tokens are carried in the URL fragment (`#token=`), not a query string. The frontend keeps the token in component state, not persistent web storage.
+- Email delivery uses the `EmailSender` interface. The in-memory implementation is not real email delivery. Do not claim that users receive real messages until a production sender is implemented and configured.
+
+## 4. Future roadmap tasks — do not remove or silently absorb
+
+These task entries are part of the project's persistent planning information. Preserve their names and status when editing project documentation.
+
+| Task | Name | Status | Rule |
+|---|---|---|---|
+| Task 11 | Email Verification | PENDING | Separate task. Do not treat the `EmailSender` interface or password-reset flow as completed email verification. |
+| Task 14 | Admin / Content Management | NOT IMPLEMENTED | Separate task. Do not imply an admin panel exists. |
+| Task 15 | Deployment, Portability and Production Readiness | PENDING | Separate task. Do not imply the project is production-ready or that deployment choices are finalized. |
+
+Do not start these tasks while working on another task unless the user explicitly authorizes it. When one of these tasks is authorized, audit the current repository and approved task scope first.
+
+## 5. Scope discipline
+
+- Do not overengineer. Add abstractions, dependencies, configuration, or features only when the current requirement justifies them.
+- Do not implement Telegram integration as an incidental feature. If approved later, keep it isolated from core anime/watch services and follow a documented architecture decision.
+- Do not add adaptive streaming, bandwidth estimation, buffer control, or prefetching without a measured requirement and approved scope.
+- Do not add Redis, Kafka, or a message queue without a concrete multi-process or multi-service requirement.
+- Do not make unrelated refactors while implementing a task.
+- Preserve existing API contracts unless a change is explicitly required and approved.
+
+## 6. Secrets and configuration
+
+- Never commit secrets. Backend configuration comes from environment variables through the established configuration layer; frontend variables must use the `VITE_` prefix.
+- `.env` files are ignored by Git. Example environment files must contain placeholders, never real credentials.
+- Do not hardcode API keys, database credentials, or private tokens.
+- `DEBUG` remains `false` by default. Enable it only for local troubleshooting, never as a committed default.
+- The current database strategy is **MySQL primary / SQLite alternative for local development and isolated tests**. Do not silently revert documentation to the superseded SQLite-dev / PostgreSQL-ready strategy.
+
+## 7. Logging and sensitive data
+
+- Keep cross-cutting logging at application boundaries rather than scattering it through business logic.
+- Request correlation is handled by the request-context middleware and logging context. Do not pass request IDs through service signatures without a specific need.
+- Never log plaintext passwords, password hashes, JWTs, authorization headers, cookies, API keys, database connection strings/credentials, raw reset tokens, reset URLs, email bodies, or unfiltered provider response/error bodies.
+- Prefer safe identifiers and exception types when logging failures.
+- Use appropriate log levels: INFO for normal request lifecycle and successful security events; WARNING for authentication failures and unauthorized attempts; ERROR for unhandled exceptions, provider failures, and database errors.
+
+## 8. Rate limiting
+
+- Rate limiting is route-scoped, not a global middleware. The documented current limits apply independently to `/api/auth/register` and `/api/auth/login` at 5 requests/minute/IP.
+- `RateLimiter` is an interface. The current `InMemoryRateLimiter` is process-local; no distributed Redis backend is assumed.
+- Do not trust `X-Forwarded-For` or similar client-supplied headers for rate-limit identity until a trusted reverse-proxy configuration exists.
+- Tests touching rate-limited endpoints should use the established test fixture that resets limiter state.
+
+## 9. Testing and completion criteria
+
+- Meaningful business logic requires tests, including validation, upsert, and error paths.
+- Do not call a task complete without running the relevant checks.
+- Backend checks include pytest, Ruff lint, and Ruff format check.
+- Frontend checks include `npm run build` and `npm run lint`.
+- Do not weaken tests merely to make them pass. Understand the cause of a failure before changing tests or implementation.
+- Report test results accurately, including warnings and failures.
+
+## 10. Multi-agent and contributor discipline
+
+- Read `ARCHITECTURE.md` and relevant `docs/decisions/` before changing an unfamiliar module.
+- Do not trust another agent's report without verifying the actual repository state, imports, contracts, dependencies, integration, tests, and regressions.
+- Document deviations: what changed, why, alternatives considered, and impact.
+- Record approved architecture decisions in `docs/decisions/NNNN-title.md`.
+- Preserve user changes. Do not reset, overwrite, delete, commit, or push without explicit authorization.
+
+## 11. Current known limitations
+
+- The email sender currently documented as `memory` stores messages in an in-process outbox; it does not send real email.
+- Task 11 — Email Verification — remains pending.
+- Task 14 — Admin / Content Management — is not implemented.
+- Task 15 — Deployment, Portability and Production Readiness — remains pending.
+- The current in-memory rate limiter is process-local and is not a distributed limiter.
+- Telegram integration, recommendation systems, and adaptive streaming are not implemented.
+
+These limitations are not permission to remove roadmap items. Update this section only when the corresponding work has been implemented, tested, and verified.
+
+
+
+qoshimcha agar malumotlar kam bo'lsa 
+
+# Project Rules
+
 These are working rules for this codebase, not aspirations. If a change
 can't follow one of these, that's a signal to stop and reconsider the
 change, not to make an exception silently.
@@ -38,6 +140,28 @@ change, not to make an exception silently.
 - **No new auth mechanism** (sessions, cookies, a second token scheme,
   etc.) without a real reason - the existing JWT + Argon2id setup is the
   one and only mechanism until something concrete requires otherwise.
+
+## Password reset
+
+- **Redeeming a token is one transaction.** Spending the token, changing the
+  password, expiring other reset links, and revoking the user's refresh
+  sessions all live in `PasswordResetTokenRepository.consume_and_reset_password`
+  and commit together. Don't split them across commits, and don't use
+  `mark_used_if_active` for a reset - it commits on its own and would spend the
+  token before the password changes.
+- **Never log a raw reset token, a reset URL, a password, or an email body.**
+  The body contains the link. Log user ids and exception *types* only.
+- **`forgot-password` must stay response-identical** for registered,
+  unregistered, and inactive addresses - including when email delivery fails
+  (the service contains that failure). Don't add a branch that makes any of
+  these cases observable to the client.
+- **The reset link carries the token in the URL fragment (`#token=`), never a
+  query string,** and the frontend keeps it in component state only - never in
+  web storage.
+- **Email goes through the `EmailSender` interface.** No real vendor exists yet;
+  adding one means a new implementation plus a factory branch. Tests read reset
+  links from the in-memory outbox, which `tests/backend/conftest.py` clears
+  automatically between tests.
 
 ## Scope discipline
 
@@ -165,3 +289,4 @@ These are recorded here deliberately rather than silently ignored:
   alias, and passlib's own use of the deprecated stdlib `crypt` module and
   an internal `argon2-cffi` version check). These originate inside
   third-party packages, not this codebase, and don't affect behavior.
+
