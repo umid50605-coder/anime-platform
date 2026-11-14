@@ -10,3 +10,9 @@ class ErrorResponse(BaseModel):
     """Consistent error shape returned by the global exception handler."""
 
     detail: str
+
+
+class MessageResponse(BaseModel):
+    """A plain human-readable outcome message, for endpoints with nothing else to return."""
+
+    detail: str

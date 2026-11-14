@@ -12,11 +12,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_access_token_claims
 from app.integrations.anime_api import AnimeProvider, get_anime_provider
+from app.integrations.email import EmailSender, get_email_sender
 from app.integrations.video_source import VideoProvider, get_video_provider
 from app.models.user import User
 from app.repositories.anime import AnimeRepository
 from app.repositories.episode import EpisodeRepository
 from app.repositories.favorite import FavoriteRepository
+from app.repositories.password_reset import PasswordResetTokenRepository
 from app.repositories.refresh_session import RefreshSessionRepository
 from app.repositories.user import UserRepository
 from app.repositories.watch import WatchRepository
@@ -24,6 +26,7 @@ from app.services.anime import AnimeService
 from app.services.auth import AuthService
 from app.services.episode import EpisodeService
 from app.services.favorite import FavoriteService
+from app.services.password_reset import PasswordResetService
 from app.services.user import UserService
 from app.services.watch import WatchService
 
@@ -56,6 +59,12 @@ def get_refresh_session_repository(
     return RefreshSessionRepository(db)
 
 
+def get_password_reset_repository(
+    db: Session = Depends(get_db),
+) -> PasswordResetTokenRepository:
+    return PasswordResetTokenRepository(db)
+
+
 # --- Providers ----------------------------------------------------------------
 
 
@@ -65,6 +74,10 @@ def get_anime_provider_dep() -> AnimeProvider:
 
 def get_video_provider_dep() -> VideoProvider:
     return get_video_provider()
+
+
+def get_email_sender_dep() -> EmailSender:
+    return get_email_sender()
 
 
 # --- Services -----------------------------------------------------------------
@@ -79,6 +92,16 @@ def get_auth_service(
     refresh_session_repository: RefreshSessionRepository = Depends(get_refresh_session_repository),
 ) -> AuthService:
     return AuthService(user_service, refresh_session_repository)
+
+
+def get_password_reset_service(
+    user_service: UserService = Depends(get_user_service),
+    password_reset_repository: PasswordResetTokenRepository = Depends(
+        get_password_reset_repository
+    ),
+    email_sender: EmailSender = Depends(get_email_sender_dep),
+) -> PasswordResetService:
+    return PasswordResetService(user_service, password_reset_repository, email_sender)
 
 
 def get_anime_service(

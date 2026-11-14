@@ -2,13 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.api.deps import get_auth_service, get_user_service
+from app.api.deps import get_auth_service, get_password_reset_service, get_user_service
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limited
-from app.schemas.auth import Token
+from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token
+from app.schemas.common import MessageResponse
 from app.schemas.user import UserCreate, UserRead
 from app.services.auth import AuthService, InvalidCredentialsError, InvalidRefreshTokenError
+from app.services.password_reset import InvalidResetTokenError, PasswordResetService
 from app.services.user import EmailAlreadyRegisteredError, UserService
 
 router = APIRouter()
@@ -20,6 +22,18 @@ logger = get_logger(__name__)
 REGISTER_RATE_LIMIT = Depends(rate_limited("register", max_requests=5, window_seconds=60))
 LOGIN_RATE_LIMIT = Depends(rate_limited("login", max_requests=5, window_seconds=60))
 REFRESH_RATE_LIMIT = Depends(rate_limited("refresh", max_requests=5, window_seconds=60))
+# Same per-IP convention for the password-reset pair; each action keeps its own counter.
+FORGOT_PASSWORD_RATE_LIMIT = Depends(
+    rate_limited("forgot_password", max_requests=5, window_seconds=60)
+)
+RESET_PASSWORD_RATE_LIMIT = Depends(
+    rate_limited("reset_password", max_requests=5, window_seconds=60)
+)
+
+# Identical text for every forgot-password outcome - see PasswordResetService.
+FORGOT_PASSWORD_MESSAGE = (
+    "If an account exists for that email address, we have sent it password reset instructions."
+)
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -141,3 +155,42 @@ def logout(
     _clear_refresh_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[FORGOT_PASSWORD_RATE_LIMIT],
+)
+def forgot_password(
+    data: ForgotPasswordRequest,
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service),
+) -> MessageResponse:
+    # Same status and body whether or not the address is registered. No origin
+    # check: this endpoint is not cookie-authenticated, so there is no ambient
+    # credential for a cross-site request to abuse.
+    password_reset_service.request_password_reset(data.email)
+    return MessageResponse(detail=FORGOT_PASSWORD_MESSAGE)
+
+
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    dependencies=[RESET_PASSWORD_RATE_LIMIT],
+)
+def reset_password(
+    data: ResetPasswordRequest,
+    password_reset_service: PasswordResetService = Depends(get_password_reset_service),
+) -> MessageResponse:
+    try:
+        user_id = password_reset_service.reset_password(data.token, data.new_password)
+    except InvalidResetTokenError as exc:
+        # One generic 400 for unknown, expired, and already-used tokens alike.
+        logger.warning("password reset failed: invalid, expired, or already-used token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        ) from exc
+    logger.info("password reset succeeded user_id=%s", user_id)
+    return MessageResponse(detail="Your password has been reset. You can now sign in.")

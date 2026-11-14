@@ -28,13 +28,18 @@ class Settings(BaseSettings):
     # MySQL is the primary database. SQLite remains available when explicitly
     # selected, and test fixtures use isolated in-memory SQLite databases.
     database_url: str = "mysql+pymysql://anime_app:CHANGE_ME@localhost:3306/anime_metadata"
-
+    
     # --- Security / Auth ---
     jwt_secret_key: str = "CHANGE_ME_IN_ENV"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
     password_reset_token_expire_minutes: int = 30
+    # Base URL the password-reset link in the email points at (the SPA).
+    # The link is `<base>/reset-password#token=...`: the token is in the URL
+    # FRAGMENT, which browsers never send to any server, so it can't end up in
+    # access logs or Referer headers. See docs/decisions/0005-password-reset.md.
+    frontend_base_url: str = "http://localhost:5173"
 
     # --- CORS ---
     cors_allow_origins: list[str] = [
@@ -52,6 +57,7 @@ class Settings(BaseSettings):
     anime_provider_timeout_seconds: float = 10.0
     video_provider: str = "mock"
     video_storage_path: Path = Path.home() / "Videos" / "anime"
+    email_provider: str = "memory"
 
     model_config = SettingsConfigDict(
         env_file=".env",
