@@ -8,6 +8,7 @@ import { ProfilePage } from "../pages/profile/ProfilePage";
 import { FavoritesPage } from "../pages/favorites/FavoritesPage";
 import { ForgotPasswordPage } from "../pages/forgot-password/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/reset-password/ResetPasswordPage";
+import { VerifyEmailPage } from "../pages/verify-email/VerifyEmailPage";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
       </Routes>
     </>
   );

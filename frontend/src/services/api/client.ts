@@ -2,10 +2,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000
 
 export class ApiError extends Error {
   status: number;
+  /** Machine-readable code when the server sends one (e.g. "email_not_verified"). */
+  code?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = "ApiError";
   }
 }
@@ -48,7 +51,16 @@ async function readResponse<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message = (data && (data.detail as string)) || response.statusText;
+    const detail = data?.detail;
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      // Structured error: {"code": "...", "message": "..."}.
+      throw new ApiError(
+        response.status,
+        (detail.message as string) || response.statusText,
+        detail.code as string | undefined,
+      );
+    }
+    const message = (typeof detail === "string" && detail) || response.statusText;
     throw new ApiError(response.status, message);
   }
 

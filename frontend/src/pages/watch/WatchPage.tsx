@@ -28,8 +28,11 @@ export function WatchPage() {
   const { episodeId } = useParams<{ episodeId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Progress is saved only for signed-in users with a verified email; everyone
+  // else (including unverified users) can still watch.
+  const canTrackProgress = !!user?.email_verified;
   const { positionSeconds, isLoading, saveProgress } = useWatchProgress(
-    user ? episodeId : undefined,
+    canTrackProgress ? episodeId : undefined,
   );
 
   const [stream, setStream] = useState<StreamInfo | null>(null);
@@ -64,7 +67,7 @@ export function WatchPage() {
 
   const handleProgress = useCallback(
     (seconds: number) => {
-      if (!user) return;
+      if (!canTrackProgress) return;
       if (Math.abs(seconds - lastSavedAtRef.current) >= SAVE_INTERVAL_SECONDS) {
         lastSavedAtRef.current = seconds;
         saveProgress(seconds).catch(() => {
@@ -72,7 +75,7 @@ export function WatchPage() {
         });
       }
     },
-    [saveProgress, user],
+    [saveProgress, canTrackProgress],
   );
 
   if (error) {
@@ -122,7 +125,7 @@ export function WatchPage() {
               {episode.title ? ` · ${episode.title}` : ""}
             </p>
           )}
-          {user && <p className="status-line">Resuming from {formatPosition(positionSeconds)}</p>}
+          {canTrackProgress && <p className="status-line">Resuming from {formatPosition(positionSeconds)}</p>}
         </div>
         <div className="row">
           <SecondaryButton

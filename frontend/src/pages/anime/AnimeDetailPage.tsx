@@ -14,7 +14,7 @@ export function AnimeDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isFavorite, toggleFavorite } = useFavorites(!!user);
+  const { isFavorite, toggleFavorite } = useFavorites(!!user?.email_verified);
 
   const [anime, setAnime] = useState<AnimeDetail | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -93,10 +93,13 @@ export function AnimeDetailPage() {
                 ) : (
                   <span className="status-line">No episodes available yet.</span>
                 )}
-                {user && (
+                {user?.email_verified && (
                   <SecondaryButton onClick={() => toggleFavorite(anime.id)}>
                     {isFavorite(anime.id) ? "★ In favorites" : "☆ Add to favorites"}
                   </SecondaryButton>
+                )}
+                {user && !user.email_verified && (
+                  <span className="status-line">Verify your email to save favorites.</span>
                 )}
               </div>
             </div>

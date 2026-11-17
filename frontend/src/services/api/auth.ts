@@ -44,3 +44,11 @@ export function resetPassword(token: string, newPassword: string): Promise<Messa
     new_password: newPassword,
   });
 }
+
+export function verifyEmail(token: string): Promise<MessageResponse> {
+  return apiClient.post<MessageResponse>("/api/auth/verify-email", { token });
+}
+
+export function resendVerification(email: string): Promise<MessageResponse> {
+  return apiClient.post<MessageResponse>("/api/auth/resend-verification", { email });
+}

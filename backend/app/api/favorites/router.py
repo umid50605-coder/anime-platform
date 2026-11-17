@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import get_current_user, get_favorite_service
+from app.api.deps import get_favorite_service, get_verified_user
 from app.models.user import User
 from app.schemas.favorite import FavoriteCreate, FavoriteRead
 from app.services.favorite import AnimeNotFoundError, FavoriteService
@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/", response_model=list[FavoriteRead])
 def list_favorites(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     favorite_service: FavoriteService = Depends(get_favorite_service),
 ) -> list[FavoriteRead]:
     return favorite_service.list_for_user(current_user.id)
@@ -19,7 +19,7 @@ def list_favorites(
 @router.post("/", response_model=FavoriteRead, status_code=status.HTTP_201_CREATED)
 def add_favorite(
     data: FavoriteCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     favorite_service: FavoriteService = Depends(get_favorite_service),
 ) -> FavoriteRead:
     try:
@@ -31,7 +31,7 @@ def add_favorite(
 @router.delete("/{anime_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_favorite(
     anime_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     favorite_service: FavoriteService = Depends(get_favorite_service),
 ) -> None:
     removed = favorite_service.remove(current_user.id, anime_id)

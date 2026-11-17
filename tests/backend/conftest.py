@@ -49,6 +49,27 @@ def _reset_email_outbox():
     reset_email_sender()
 
 
+@pytest.fixture(autouse=True)
+def _no_verification_email_by_default(request, monkeypatch):
+    """
+    Registration (Task 11) now emails a verification link into the same
+    process-wide outbox the password-reset tests (Task 10, closed) assert on
+    ("outbox holds exactly the reset mail"). So that those tests keep their
+    original meaning without being edited, sending is a no-op by default.
+    Tests that exercise verification email request `real_verification_email`.
+    """
+    if "real_verification_email" in request.fixturenames:
+        return
+    from app.services.email_verification import EmailVerificationService
+
+    monkeypatch.setattr(EmailVerificationService, "send_verification_email", lambda *a, **k: False)
+
+
+@pytest.fixture()
+def real_verification_email():
+    """Opt-in marker: use the real EmailVerificationService.send_verification_email."""
+
+
 @pytest.fixture()
 def db_session():
     engine = create_engine(

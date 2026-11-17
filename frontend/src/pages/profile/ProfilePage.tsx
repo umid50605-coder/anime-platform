@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { PrimaryButton, SecondaryButton } from "../../components/common/Button";
 import { ErrorNotice } from "../../components/common/Status";
+import { ResendVerification } from "../../features/auth/ResendVerification";
 import { useAuth } from "../../features/auth/useAuth";
 import { ApiError } from "../../services/api/client";
 
@@ -15,6 +16,19 @@ export function ProfilePage() {
         <h1>Profile</h1>
         <p>{user.display_name || user.email}</p>
         <p className="status-line">{user.email}</p>
+        {user.email_verified ? (
+          <p className="status-line">Email verified</p>
+        ) : (
+          <div className="stack">
+            <h2>Verify your email</h2>
+            <p>
+              Your account is awaiting email verification. If you have not received a
+              verification link, you can request another one below. Verifying unlocks favorites
+              and watch progress; browsing and watching work without it.
+            </p>
+            <ResendVerification email={user.email} />
+          </div>
+        )}
         <SecondaryButton style={{ alignSelf: "flex-start" }} onClick={logout}>
           Sign out
         </SecondaryButton>

@@ -16,6 +16,7 @@ from app.integrations.email import EmailSender, get_email_sender
 from app.integrations.video_source import VideoProvider, get_video_provider
 from app.models.user import User
 from app.repositories.anime import AnimeRepository
+from app.repositories.email_verification import EmailVerificationTokenRepository
 from app.repositories.episode import EpisodeRepository
 from app.repositories.favorite import FavoriteRepository
 from app.repositories.password_reset import PasswordResetTokenRepository
@@ -24,6 +25,7 @@ from app.repositories.user import UserRepository
 from app.repositories.watch import WatchRepository
 from app.services.anime import AnimeService
 from app.services.auth import AuthService
+from app.services.email_verification import EmailVerificationService
 from app.services.episode import EpisodeService
 from app.services.favorite import FavoriteService
 from app.services.password_reset import PasswordResetService
@@ -65,6 +67,12 @@ def get_password_reset_repository(
     return PasswordResetTokenRepository(db)
 
 
+def get_email_verification_repository(
+    db: Session = Depends(get_db),
+) -> EmailVerificationTokenRepository:
+    return EmailVerificationTokenRepository(db)
+
+
 # --- Providers ----------------------------------------------------------------
 
 
@@ -102,6 +110,14 @@ def get_password_reset_service(
     email_sender: EmailSender = Depends(get_email_sender_dep),
 ) -> PasswordResetService:
     return PasswordResetService(user_service, password_reset_repository, email_sender)
+
+
+def get_email_verification_service(
+    user_service: UserService = Depends(get_user_service),
+    repository: EmailVerificationTokenRepository = Depends(get_email_verification_repository),
+    email_sender: EmailSender = Depends(get_email_sender_dep),
+) -> EmailVerificationService:
+    return EmailVerificationService(user_service, repository, email_sender)
 
 
 def get_anime_service(
@@ -164,3 +180,20 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def get_verified_user(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Like get_current_user, but only for users whose email is verified. Used on
+    account-scoped features (favorites, watch progress/history). Login, /users/me
+    and the public catalog stay available to unverified users.
+    """
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "email_not_verified",
+                "message": "Verify your email address to use this feature.",
+            },
+        )
+    return current_user
