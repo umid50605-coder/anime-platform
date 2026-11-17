@@ -55,13 +55,22 @@ class EmailVerificationService:
 
         settings = get_settings()
         raw_token = create_email_verification_token()
-        outcome = self.repository.issue_if_allowed(
-            user_id,
-            hash_email_verification_token(raw_token),
-            ttl=timedelta(minutes=settings.email_verification_token_expire_minutes),
-            cooldown_seconds=settings.email_verification_resend_cooldown_seconds,
-            max_per_hour=settings.email_verification_max_sends_per_hour,
-        )
+        try:
+            outcome = self.repository.issue_if_allowed(
+                user_id,
+                hash_email_verification_token(raw_token),
+                ttl=timedelta(minutes=settings.email_verification_token_expire_minutes),
+                cooldown_seconds=settings.email_verification_resend_cooldown_seconds,
+                max_per_hour=settings.email_verification_max_sends_per_hour,
+            )
+        except Exception as exc:
+            # A lock timeout / deadlock must not fail registration or resend.
+            logger.error(
+                "verification token issue failed user_id=%s exception_type=%s",
+                user_id,
+                type(exc).__name__,
+            )
+            return False
         if outcome != "issued":
             logger.info("verification email not issued (%s) user_id=%s", outcome, user_id)
             return False
