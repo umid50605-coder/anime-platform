@@ -349,6 +349,21 @@ nothing, so the feature cannot reach real users until a real `EmailSender` is
 added. Design, transaction guarantees, and limitations:
 `docs/decisions/0005-password-reset.md`.
 
+## Email verification
+
+| | |
+|---|---|
+| API | `POST /api/auth/verify-email` (`{"token"}` -> `200`, or a generic `400`), `POST /api/auth/resend-verification` (`{"email"}` -> `202`, same answer for every address). `UserRead` now includes `email_verified`. |
+| Policy | Unverified users can sign in, browse and watch, and use `/users/me`. Favorites and watch progress/history return `403` with `detail.code = "email_not_verified"` until verified. Users that existed before the migration are backfilled as verified. |
+| Frontend | `/verify-email#token=...` (the emailed link); the Profile page shows a "Verify your email" panel with a resend button for unverified users. |
+| Settings | `EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES` (default 1440), `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` (60), `EMAIL_VERIFICATION_MAX_SENDS_PER_HOUR` (5), `EMAIL_PROVIDER` (`memory` or `smtp`), and for SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `SMTP_USE_SSL`, `SMTP_TIMEOUT_SECONDS`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`, plus `FRONTEND_BASE_URL` |
+| Database | Migration `b3d1c8a47e52`: `users.email_verified_at` + `email_verification_tokens`; run `alembic upgrade head` |
+
+`EMAIL_PROVIDER=memory` (the default) delivers nothing. Set `EMAIL_PROVIDER=smtp`
+with the SMTP settings (via environment only) to send real mail. Design and
+limitations (including the existing `409` on duplicate registration):
+`docs/decisions/0006-email-verification.md`.
+
 ## Status
 
 This is a **foundation**, not a finished product - see

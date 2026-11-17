@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
     password_reset_token_expire_minutes: int = 30
+    # Email verification (Task 11). The link is `<frontend_base_url>/verify-email#token=...`
+    # (URL fragment, same reasoning as password reset). Resend is limited per
+    # ACCOUNT in the database (cooldown + hourly cap), on top of the per-IP limit.
+    email_verification_token_expire_minutes: int = 24 * 60
+    email_verification_resend_cooldown_seconds: int = 60
+    email_verification_max_sends_per_hour: int = 5
     # Base URL the password-reset link in the email points at (the SPA).
     # The link is `<base>/reset-password#token=...`: the token is in the URL
     # FRAGMENT, which browsers never send to any server, so it can't end up in
@@ -57,7 +63,17 @@ class Settings(BaseSettings):
     anime_provider_timeout_seconds: float = 10.0
     video_provider: str = "mock"
     video_storage_path: Path = Path.home() / "Videos" / "anime"
-    email_provider: str = "memory"
+    email_provider: str = "memory"  # memory | smtp
+    # SMTP (only read when email_provider="smtp"). Supply via environment only.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True  # STARTTLS on smtp_port; ignored when smtp_use_ssl
+    smtp_use_ssl: bool = False  # implicit TLS (typically port 465)
+    smtp_timeout_seconds: float = 10.0
+    email_from_address: str = ""
+    email_from_name: str = "Anime Platform"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -88,6 +88,8 @@ def test_watch_history_response_still_includes_resolved_anime_id(client):
     list_history() now does that assembly itself and the response contract
     (episode_id/anime_id/position_seconds/updated_at) is unchanged.
     """
+    from app.core.database import get_db
+
     anime = _seed_one_anime_with_episode(client)
     episode_id = client.get(f"/api/episodes/anime/{anime.id}").json()[0]["id"]
 
@@ -101,6 +103,18 @@ def test_watch_history_response_still_includes_resolved_anime_id(client):
     )
     token = login_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+
+    # Task 11: watch progress/history now require a verified email. Verify the
+    # account directly so this test keeps checking only the layering contract.
+    from datetime import UTC, datetime
+
+    from app.models.user import User
+
+    db = next(client.app.dependency_overrides[get_db]())
+    db.query(User).filter(User.email == "history-user@example.com").update(
+        {User.email_verified_at: datetime.now(UTC)}
+    )
+    db.commit()
 
     client.put(f"/api/watch/{episode_id}/progress", json={"position_seconds": 42}, headers=headers)
 

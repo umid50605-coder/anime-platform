@@ -26,3 +26,11 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # NULL = email not verified. Existing users are backfilled by the migration.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None

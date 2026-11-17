@@ -16,3 +16,4 @@ class UserRead(BaseModel):
     email: EmailStr
     display_name: str | None = None
     created_at: datetime
+    email_verified: bool = False

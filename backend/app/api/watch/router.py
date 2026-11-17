@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
-from app.api.deps import get_current_user, get_watch_service
+from app.api.deps import get_verified_user, get_watch_service
 from app.models.user import User
 from app.schemas.episode import StreamInfo
 from app.schemas.watch import WatchHistoryEntry, WatchProgressRead, WatchProgressUpdate
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/{episode_id}/progress", response_model=WatchProgressRead)
 def get_progress(
     episode_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     watch_service: WatchService = Depends(get_watch_service),
 ) -> WatchProgressRead:
     progress = watch_service.get_progress(current_user.id, episode_id)
@@ -32,7 +32,7 @@ def get_progress(
 def update_progress(
     episode_id: str,
     data: WatchProgressUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     watch_service: WatchService = Depends(get_watch_service),
 ) -> WatchProgressRead:
     try:
@@ -43,7 +43,7 @@ def update_progress(
 
 @router.get("/history", response_model=list[WatchHistoryEntry])
 def get_history(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     watch_service: WatchService = Depends(get_watch_service),
 ) -> list[WatchHistoryEntry]:
     items = watch_service.list_history(current_user.id)

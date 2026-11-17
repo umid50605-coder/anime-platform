@@ -21,3 +21,13 @@ class ResetPasswordRequest(BaseModel):
     # bound also stops a huge input from being fed to Argon2. Registration is
     # deliberately NOT changed here - see docs/decisions/0005-password-reset.md.
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailRequest(BaseModel):
+    # Validated by lookup, not shape; bounds only cap request size. Unknown,
+    # expired and used tokens all get the same generic 400.
+    token: str = Field(min_length=1, max_length=256)
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr

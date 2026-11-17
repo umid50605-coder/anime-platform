@@ -74,8 +74,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const operationVersion = authOperationVersion.current;
+    try {
+      const currentUser = await fetchMe();
+      if (operationVersion === authOperationVersion.current) {
+        setUser(currentUser);
+      }
+    } catch {
+      // Signed out (401) or offline: leave the current state alone.
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

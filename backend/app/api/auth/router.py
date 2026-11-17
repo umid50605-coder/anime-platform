@@ -2,14 +2,29 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.api.deps import get_auth_service, get_password_reset_service, get_user_service
+from app.api.deps import (
+    get_auth_service,
+    get_email_verification_service,
+    get_password_reset_service,
+    get_user_service,
+)
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limited
-from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    Token,
+    VerifyEmailRequest,
+)
 from app.schemas.common import MessageResponse
 from app.schemas.user import UserCreate, UserRead
 from app.services.auth import AuthService, InvalidCredentialsError, InvalidRefreshTokenError
+from app.services.email_verification import (
+    EmailVerificationService,
+    InvalidVerificationTokenError,
+)
 from app.services.password_reset import InvalidResetTokenError, PasswordResetService
 from app.services.user import EmailAlreadyRegisteredError, UserService
 
@@ -28,6 +43,19 @@ FORGOT_PASSWORD_RATE_LIMIT = Depends(
 )
 RESET_PASSWORD_RATE_LIMIT = Depends(
     rate_limited("reset_password", max_requests=5, window_seconds=60)
+)
+
+# Email verification: same per-IP convention, each action with its own counter.
+# Per-ACCOUNT resend limits live in EmailVerificationService (DB-backed).
+VERIFY_EMAIL_RATE_LIMIT = Depends(rate_limited("verify_email", max_requests=5, window_seconds=60))
+RESEND_VERIFICATION_RATE_LIMIT = Depends(
+    rate_limited("resend_verification", max_requests=5, window_seconds=60)
+)
+
+# Identical text for every resend-verification outcome.
+RESEND_VERIFICATION_MESSAGE = (
+    "If an account exists for that email address and it is not verified yet, "
+    "we have sent it a verification link."
 )
 
 # Identical text for every forgot-password outcome - see PasswordResetService.
@@ -71,7 +99,11 @@ def require_allowed_origin(request: Request) -> None:
     status_code=status.HTTP_201_CREATED,
     dependencies=[REGISTER_RATE_LIMIT],
 )
-def register(data: UserCreate, user_service: UserService = Depends(get_user_service)) -> UserRead:
+def register(
+    data: UserCreate,
+    user_service: UserService = Depends(get_user_service),
+    verification_service: EmailVerificationService = Depends(get_email_verification_service),
+) -> UserRead:
     try:
         user = user_service.register(data)
     except EmailAlreadyRegisteredError as exc:
@@ -81,6 +113,8 @@ def register(data: UserCreate, user_service: UserService = Depends(get_user_serv
         logger.warning("registration failed: email already registered")
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     logger.info("registration succeeded user_id=%s", user.id)
+    # Contained: a delivery failure never fails registration (user can resend).
+    verification_service.send_verification_email(user)
     return user
 
 
@@ -194,3 +228,41 @@ def reset_password(
         ) from exc
     logger.info("password reset succeeded user_id=%s", user_id)
     return MessageResponse(detail="Your password has been reset. You can now sign in.")
+
+
+@router.post(
+    "/verify-email",
+    response_model=MessageResponse,
+    dependencies=[VERIFY_EMAIL_RATE_LIMIT],
+)
+def verify_email(
+    data: VerifyEmailRequest,
+    verification_service: EmailVerificationService = Depends(get_email_verification_service),
+) -> MessageResponse:
+    try:
+        user_id = verification_service.verify(data.token)
+    except InvalidVerificationTokenError as exc:
+        # One generic 400 for unknown, expired and already-used tokens alike.
+        logger.warning("email verification failed: invalid, expired, or already-used token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        ) from exc
+    logger.info("email verification succeeded user_id=%s", user_id)
+    return MessageResponse(detail="Your email address has been verified.")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[RESEND_VERIFICATION_RATE_LIMIT],
+)
+def resend_verification(
+    data: ResendVerificationRequest,
+    verification_service: EmailVerificationService = Depends(get_email_verification_service),
+) -> MessageResponse:
+    # Same status and body whether or not the address is registered, verified,
+    # throttled, or delivery failed.
+    verification_service.resend_for_email(data.email)
+    return MessageResponse(detail=RESEND_VERIFICATION_MESSAGE)

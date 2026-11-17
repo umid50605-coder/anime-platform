@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 @lru_cache
 def get_email_sender() -> EmailSender:
     """
-    Returns the configured EmailSender implementation (only "memory" today).
+    Returns the configured EmailSender implementation ("memory" or "smtp").
 
     Cached so every dependency injection across the process shares one
     instance - the same pattern get_anime_provider/get_video_provider use.
@@ -26,6 +26,20 @@ def get_email_sender() -> EmailSender:
                 "(password reset links will never reach users)"
             )
         return InMemoryEmailSender()
+    if settings.email_provider == "smtp":
+        from app.integrations.email.smtp_sender import SmtpEmailSender
+
+        return SmtpEmailSender(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            username=settings.smtp_username,
+            password=settings.smtp_password,
+            from_address=settings.email_from_address,
+            from_name=settings.email_from_name,
+            use_tls=settings.smtp_use_tls,
+            use_ssl=settings.smtp_use_ssl,
+            timeout_seconds=settings.smtp_timeout_seconds,
+        )
     raise ValueError(f"Unknown email_provider setting: {settings.email_provider}")
 
 
