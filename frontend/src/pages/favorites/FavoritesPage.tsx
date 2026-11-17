@@ -8,7 +8,7 @@ import type { Anime } from "../../types";
 
 export function FavoritesPage() {
   const { user } = useAuth();
-  const { favorites, isLoading } = useFavorites(!!user);
+  const { favorites, isLoading } = useFavorites(!!user?.email_verified);
   const [animeById, setAnimeById] = useState<Record<string, Anime>>({});
 
   useEffect(() => {
@@ -25,6 +25,15 @@ export function FavoritesPage() {
       <div className="container page">
         <h1>Favorites</h1>
         <ErrorNotice message="Sign in to see your favorites." />
+      </div>
+    );
+  }
+
+  if (!user.email_verified) {
+    return (
+      <div className="container page stack">
+        <h1>Favorites</h1>
+        <ErrorNotice message="Verify your email address to use favorites. You can request a verification link on your profile page." />
       </div>
     );
   }
