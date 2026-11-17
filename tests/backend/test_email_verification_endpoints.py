@@ -95,6 +95,22 @@ def test_registration_survives_email_delivery_failure(client, monkeypatch):
     assert r.status_code == 201  # account exists; user can resend
 
 
+def test_registration_and_resend_survive_token_issue_db_error(client, monkeypatch):
+    from app.repositories.email_verification import EmailVerificationTokenRepository
+    from sqlalchemy.exc import OperationalError
+
+    def boom(*_a, **_k):
+        raise OperationalError("stmt", {}, Exception("lock wait timeout"))
+
+    monkeypatch.setattr(EmailVerificationTokenRepository, "issue_if_allowed", boom)
+    r = client.post("/api/auth/register", json={"email": EMAIL, "password": PASSWORD})
+    assert r.status_code == 201  # account exists even though no token was issued
+    assert _outbox() == []
+    r = client.post("/api/auth/resend-verification", json={"email": EMAIL})
+    assert r.status_code == 202  # same generic answer
+    assert _outbox() == []
+
+
 # ---- token properties -----------------------------------------------------
 
 
