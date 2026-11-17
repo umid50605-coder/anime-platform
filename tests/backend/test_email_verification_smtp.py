@@ -5,6 +5,7 @@ NOT prove delivery through a real mail server.
 """
 
 import smtplib
+import ssl
 
 import pytest
 from app.core.config import get_settings
@@ -80,6 +81,22 @@ def test_success_sequence_and_headers():
     assert "noreply@example.com" in smtp.sent["From"]
     assert smtp.sent["Subject"] == "Subject"
     assert "Body with link" in smtp.sent.get_content()
+
+
+def test_starttls_uses_a_verifying_context():
+    _sender().send(MSG)
+    ctx = FakeSMTP.instances[0].tls_context
+    assert ctx is not None
+    assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname is True
+
+
+def test_implicit_ssl_uses_a_verifying_context_and_no_starttls():
+    _sender(port=465, use_ssl=True).send(MSG)
+    smtp = FakeSMTP.instances[0]
+    assert smtp.context is not None
+    assert smtp.context.verify_mode == ssl.CERT_REQUIRED
+    assert smtp.context.check_hostname is True
+    assert "starttls" not in smtp.calls
 
 
 def test_no_login_without_username_and_no_starttls_when_disabled():
